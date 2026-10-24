@@ -1,0 +1,4 @@
+....ScopeShowcase.java: 78 lines, 78 nodes, parse 0.037s, 3 real comparisons PASS
+.MonolithDemo.java: 1430 lines, 918 nodes, parse 0.148s, 3 real comparisons PASS
+...........
+16 passed in 43.27s

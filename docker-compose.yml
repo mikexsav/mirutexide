@@ -1,0 +1,50 @@
+name: mirutex
+services:
+  engine:
+    image: mirutex-engine:local
+    build:
+      context: .
+      dockerfile: infrastructure/engine.Dockerfile
+    environment:
+      SERVER_ADDRESS: 0.0.0.0
+    mem_limit: 640m
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/engine/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+  api:
+    image: mirutex-api:local
+    build:
+      context: .
+      dockerfile: infrastructure/api.Dockerfile
+    environment:
+      ENGINE_URL: http://engine:8081
+      JAVA_IMAGE: ${JAVA_IMAGE:-eclipse-temurin:21-jdk}
+      EXECUTION_TIMEOUT: 15
+    volumes:
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    depends_on:
+      engine:
+        condition: service_healthy
+    mem_limit: 384m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,json; r=json.load(urllib.request.urlopen('http://localhost:8000/health')); assert r['status']=='ok'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  frontend:
+    image: mirutex-frontend:local
+    build:
+      context: .
+      dockerfile: infrastructure/frontend.Dockerfile
+    ports:
+      - "127.0.0.1:5173:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6

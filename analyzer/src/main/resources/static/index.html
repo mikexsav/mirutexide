@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Java Code Analyzer</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<header class="header">
+    <div class="logo">
+        <span class="logo-icon">{"</>"}</span>
+        <span>Java Code Analyzer</span>
+    </div>
+
+    <span class="header-badge">Static Code Analysis</span>
+</header>
+
+<main class="container">
+
+    <section class="hero">
+        <div class="eyebrow">АНАЛИЗ КОДА</div>
+
+        <h1>
+            Сделай свой Java-код
+            <span>лучше</span>
+        </h1>
+
+        <p>
+            Анализируй сложность алгоритмов,
+            находи повторяющиеся вычисления,
+            дублирование кода и рекурсию.
+        </p>
+    </section>
+
+    <section class="workspace">
+
+        <div class="section-heading">
+            <div>
+                <h2>Редактор Java-кода</h2>
+                <p>Вставь код, который хочешь проверить</p>
+            </div>
+
+            <span class="language-badge">JAVA</span>
+        </div>
+
+        <div class="editor">
+            <div class="editor-toolbar">
+                <div class="window-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+
+                <span>Example.java</span>
+            </div>
+
+            <textarea
+                    id="codeInput"
+                    spellcheck="false"
+                    aria-label="Java-код для анализа"
+                    placeholder="Вставь сюда Java-код..."
+            ></textarea>
+        </div>
+
+        <div class="actions">
+            <button id="exampleButton" class="secondary-button">
+                Загрузить пример
+            </button>
+
+            <button id="analyzeButton" class="primary-button">
+                Анализировать код →
+            </button>
+        </div>
+
+        <p id="errorMessage" class="error-message" role="alert"></p>
+
+    </section>
+
+    <section id="resultsSection" class="results hidden">
+
+        <div class="section-heading">
+            <div>
+                <h2>Результаты анализа</h2>
+                <p>Отчёт по проверенному Java-коду</p>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+
+            <div class="stat-card score-card">
+                <span class="stat-label">Оценка качества</span>
+                <strong id="qualityScore">—</strong>
+                <span class="stat-description">Из 100 баллов</span>
+            </div>
+
+            <div class="stat-card">
+                <span class="stat-label">Методов проверено</span>
+                <strong id="methodsAnalyzed">0</strong>
+                <span class="stat-description">Методов в коде</span>
+            </div>
+
+            <div class="stat-card">
+                <span class="stat-label">Замечаний найдено</span>
+                <strong id="issuesFound">0</strong>
+                <span class="stat-description">Всего предупреждений</span>
+            </div>
+
+        </div>
+
+        <div class="summary">
+
+            <div class="summary-item">
+                <span class="summary-dot high"></span>
+                <span>Высокий уровень</span>
+                <strong id="highCount">0</strong>
+            </div>
+
+            <div class="summary-item">
+                <span class="summary-dot medium"></span>
+                <span>Средний уровень</span>
+                <strong id="mediumCount">0</strong>
+            </div>
+
+            <div class="summary-item">
+                <span class="summary-dot low"></span>
+                <span>Низкий уровень</span>
+                <strong id="lowCount">0</strong>
+            </div>
+
+        </div>
+
+        <h3 class="issues-title">Найденные замечания</h3>
+
+        <div id="issuesList" class="issues-list"></div>
+
+    </section>
+
+</main>
+
+<footer class="footer">
+    Java Code Analyzer · Анализ Java-кода
+</footer>
+
+<script src="script.js"></script>
+
+</body>
+</html>

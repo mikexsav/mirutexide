@@ -1,0 +1,10 @@
+**/node_modules
+**/target
+**/dist
+**/.idea
+**/.DS_Store
+.tools
+.runtime
+.venv
+.git
+**/__pycache__
