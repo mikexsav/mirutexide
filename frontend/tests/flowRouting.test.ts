@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {routeConnections} from '../src/flowRouting.ts';
+import type {FlowNode} from '../src/flowLayout.ts';
+import type {Graph} from '../src/types.ts';
+const nodes:FlowNode[]=[['loop',100],['body',300],['repeat',500],['exit',700]].map(([id,y])=>({id:String(id),position:{x:100,y:Number(y)},height:100,width:260,data:{block:{} as never}}));
+const edge=(id:string,source:string,target:string,label:string)=>({id,source,target,label});
+test('true and false branches use distinct ports and retain canonical semantics',()=>{const graph={edges:[edge('t','loop','body','true'),edge('f','loop','exit','false')]} as Graph;const result=routeConnections(graph,nodes);assert.equal(result[0].sourceHandle,'out-bottom');assert.equal(result[1].sourceHandle,'out-right');assert.equal(result[1].label,'false');assert.equal(graph.edges[1].target,'exit');});
+test('loop repeats and continue use left lanes with distinct overlapping routes',()=>{const graph={edges:[edge('r','repeat','loop','repeat'),edge('c','body','loop','continue')]} as Graph;const result=routeConnections(graph,nodes);assert.ok(result.every(e=>e.backward&&e.sourceHandle==='out-left'&&e.targetHandle==='in-left'));assert.notEqual(result[0].laneX,result[1].laneX);assert.ok(result.every(e=>e.laneX!<100));});
+test('upward do-while branches route backwards while preserving true',()=>{const result=routeConnections({edges:[edge('d','repeat','body','true')]} as Graph,nodes);assert.equal(result[0].backward,true);assert.equal(result[0].label,'true');});
+test('cross-method connections are not rendered in a method canvas',()=>{assert.equal(routeConnections({edges:[edge('out','loop','other-method','')]} as Graph,nodes).length,0);});
+test('an if false branch exits on its destination side instead of crossing the true branch',()=>{const condition={...nodes[0],data:{block:{kind:'condition'} as never}};const left={...nodes[1],position:{x:-300,y:300}};const result=routeConnections({edges:[edge('false',condition.id,left.id,'false')]} as Graph,[condition,left]);assert.equal(result[0].sourceHandle,'out-left');});
+test('a loop exit stays on the right so its returning left lane remains separate',()=>{const condition={...nodes[0],data:{block:{kind:'loopCondition'} as never}};const left={...nodes[1],position:{x:-300,y:300}};const result=routeConnections({edges:[edge('false',condition.id,left.id,'false')]} as Graph,[condition,left]);assert.equal(result[0].sourceHandle,'out-right');});

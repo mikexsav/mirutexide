@@ -2,7 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import {
-  Boxes,
+  Search,
+  Sparkles,
+  Focus,
+  LogOut,
+  GitCompareArrows,
+  Map,
+  HelpCircle,
   Braces,
   GitBranch,
   FlaskConical,
@@ -39,6 +45,11 @@ import {
 } from "./types";
 import { demo } from "./demo";
 import "./App.css";
+import "./Experience.css";
+import CommandPalette, { type CommandItem } from "./CommandPalette";
+import StudioDialog from "./StudioDialog";
+import FlowSymbol from "./FlowSymbol";
+import { symbolGuide } from "./flowSymbols";
 
 type ProjectData = {
   source: string;
@@ -66,7 +77,14 @@ function restore(): {
   return { project: fresh, baseline: fresh, history: [] };
 }
 const initial = restore();
-function App() {
+function App({ demoMode = false, onExit }: { demoMode?: boolean; onExit?: () => void }) {
+  const [palette, setPalette] = useState(false);
+  const [dialog, setDialog] = useState("");
+  const [component, setComponent] = useState("");
+  const [focusMode, setFocusMode] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [methodQuery, setMethodQuery] = useState("");
+  const [dismissedParseError, setDismissedParseError] = useState("");
   const [project, setProject] = useState(initial.project);
   const [baseline, setBaseline] = useState(initial.baseline);
   const [history, setHistory] = useState<Snapshot[]>(initial.history);
@@ -143,6 +161,7 @@ function App() {
     setGraphFocus(null);
     setParsing(true);
     setParseError("");
+    setDismissedParseError("");
     setIssues([]);
     setAnalyzed(false);
     setPreview(null);
@@ -210,6 +229,7 @@ function App() {
       },
     ]);
   async function action(label: string, fn: () => Promise<void>) {
+    if (demoMode && ["Компиляция", "Проверка поведения", "Рефакторинг и тесты", "Изменение графа", "Выполнение"].includes(label)) { setDialog("access"); return; }
     if (busyRef.current) return;
     busyRef.current = true;
     setBusy(label);
@@ -404,6 +424,7 @@ function App() {
   }
   const disabled = !!busy;
   const stale = graph?.source !== source;
+  const visibleParseError = parseError !== dismissedParseError ? parseError : "";
   const option = {
     fontSize: 13,
     editContext: false,
@@ -431,27 +452,39 @@ function App() {
     tabSize: 4,
     wordWrap: "off" as const,
   };
+  const commands: CommandItem[] = [
+    ...[{id:"workspace", title:"Код и граф"}, {id:"analysis",title:"Анализ кода"}, {id:"refactor",title:"Рефакторинг"}, {id:"tests",title:"Тестирование"}, {id:"history",title:"История"}].map(v=>({...v, detail:"Открыть раздел", run:()=>setTab(v.id)})),
+    {id:"analyze",title:"Анализировать программу",detail:"Найти сложность и потенциальные проблемы",run:()=>{setTab("analysis");void analyze();}},
+    {id:"compile",title:"Компилировать Java",detail:"Проверить все файлы проекта",run:()=>{void compile();}},
+    {id:"export",title:"Экспорт проекта",detail:"Скачать Java или ZIP",run:()=>{void download();}},
+    {id:"snapshot",title:"Сохранить снимок",detail:"Создать точку восстановления",run:()=>{remember("Ручной снимок");setNotice("Снимок сохранён");}},
+    {id:"diff",title:"Линза изменений",detail:"Сравнить код с исходной версией",run:()=>setDialog("diff")},
+    {id:"map",title:"Карта методов",detail:"Найти метод и оценить размер графа",run:()=>setDialog("methods")},
+    {id:"focus",title:"Режим фокуса",detail:"Скрыть лишнее вокруг редактора",run:()=>{setTab("workspace");setFocusMode(v=>!v);}},
+    {id:"theme",title:"Переключить тему",detail:dark?"Включить светлую":"Включить тёмную",run:()=>setDark(v=>!v)},
+    ...(graph?.methods.map(m=>({id:"method-"+m.id,title:m.name,detail:`Метод · L${m.line} · ${m.signature}`,keywords:m.signature,run:()=>{setTab("workspace");setMethod(m.id);const n=graph.nodes.find(n=>n.method===m.id);if(n)select(n);}}))??[]),
+    ...(graph?.nodes.filter(n=>!["start","end"].includes(n.kind)).map(n=>({id:"node-"+n.id,title:n.label||n.code,detail:`Узел · L${n.line} · ${n.kind}`,keywords:n.code,run:()=>{setTab("workspace");select(n);}}))??[]),
+  ];
+  useEffect(()=>{const key=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==="p"){e.preventDefault();e.stopPropagation();setPalette(v=>!v);}if(e.key==="Escape"){setFullscreen(false);}};window.addEventListener("keydown",key,true);return()=>window.removeEventListener("keydown",key,true);},[]);
   return (
-    <div className="studio" data-section={tab}>
+    <div className={`studio ${collapsed ? "sidebar-collapsed" : ""} ${focusMode ? "focus-mode" : ""}`} data-section={tab}>
       <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">
-            <Boxes size={23} />
-          </div>
+        <button className="brand" title="Открыть код и граф" onClick={()=>setTab("workspace")}>
+          <img className="brand-logo" src="/mirutex.png" alt="Mirutex VMO" />
           <div>
             <strong>
               Mirutex<span className="ide-word">IDE</span>
             </strong>
             <small>THINK IN CODE. SEE THE FLOW.</small>
           </div>
-        </div>
-        <div className="workspace-switch">
+        </button>
+        <button className="workspace-switch" onClick={()=>setDialog("project")} title="Обзор проекта">
           <span className="avatar">M</span>
           <div>
             Mirutex VMO<small>Java workspace</small>
           </div>
           <ChevronRight size={14} />
-        </div>
+        </button>
         <div className="side-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
         <nav aria-label="Разделы Mirutex IDE">
           {[
@@ -495,10 +528,7 @@ function App() {
               key={f}
               className="project-file"
               onClick={() => {
-                setTab("refactor");
-                setNotice(
-                  "Файл компонента доступен в предпросмотре и ZIP-экспорте",
-                );
+                setComponent(f); setDialog("component");
               }}
             >
               <FileCode2 size={16} />
@@ -528,12 +558,14 @@ function App() {
       <main className="ide-main">
         <header className="topbar">
           <div className="breadcrumbs">
-            <PanelLeftClose size={17} />
+            <button className="icon-button sidebar-toggle" title={collapsed ? "Развернуть меню" : "Свернуть меню"} aria-expanded={!collapsed} onClick={()=>setCollapsed(v=>!v)}><PanelLeftClose size={17} /></button>
             <span>Workspace</span>
             <ChevronRight size={13} />
             <strong>{project.filename}</strong>
           </div>
           <div className="header-actions">
+            <button className="command-trigger" onClick={()=>setPalette(true)} title="Палитра команд (Ctrl/⌘ Shift P)"><Search size={15}/><span>Найти действие</span><kbd>⌘ ⇧ P</kbd></button>
+            <button className="icon-button" title="Режим фокуса" aria-pressed={focusMode} onClick={()=>{setTab("workspace");setFocusMode(v=>!v);}}><Focus size={17}/></button>
             <span className="autosave">
               <span className="dot" />
               Сохранено локально
@@ -545,7 +577,7 @@ function App() {
             >
               {dark ? <Sun size={17} /> : <Moon size={17} />}
             </button>
-            <span className="avatar small">MV</span>
+            <button className="avatar small" title="Профиль и помощь" onClick={()=>setDialog("profile")}>{demoMode ? "U" : "MV"}</button>
           </div>
         </header>
         <div className="heading">
@@ -597,43 +629,45 @@ function App() {
           </div>
         </div>
         <div className="workflow">
-          <span className="step current">
+          <button className="step current" onClick={()=>{setTab("workspace");editorRef.current?.focus();}}>
             <span>01</span>Исходный код
-          </span>
+          </button>
           <ChevronRight size={14} />
-          <span className={"step " + (graph && !stale ? "current" : "")}>
+          <button className={"step " + (graph && !stale ? "current" : "")} onClick={()=>{setTab("workspace");setDialog("methods");}}>
             <span>02</span>Визуальная модель
-          </span>
+          </button>
           <ChevronRight size={14} />
-          <span className={"step " + (analyzed ? "current" : "")}>
+          <button className={"step " + (analyzed ? "current" : "")} onClick={()=>setTab("analysis")}>
             <span>03</span>Анализ и улучшение
-          </span>
+          </button>
           <ChevronRight size={14} />
-          <span
+          <button onClick={()=>setTab("tests")}
             className={
               "step " +
               (comparison?.behavior_preserved_for_tests ? "current" : "")
             }
           >
             <span>04</span>Проверка поведения
-          </span>
+          </button>
         </div>
-        {(error || notice || parseError) && (
+        {demoMode && <div className="demo-banner"><Sparkles size={15}/><span><strong>Демо user</strong> · редактор, граф, анализ и экспорт без пароля</span><button onClick={()=>setDialog("access")}>Полный доступ <ArrowRight size={14}/></button></div>}
+        {(error || notice || visibleParseError) && (
           <div
-            className={`message ${error || parseError ? "error" : ""}`}
+            className={`message ${error || visibleParseError ? "error" : ""}`}
             role="status"
           >
-            {error || parseError ? (
+            {error || visibleParseError ? (
               <AlertTriangle size={16} />
             ) : (
               <Check size={16} />
             )}
-            <span>{error || parseError || notice}</span>
+            <span>{error || visibleParseError || notice}</span>
             <button
               title="Закрыть уведомление"
               onClick={() => {
                 setError("");
                 setNotice("");
+                setDismissedParseError(parseError);
               }}
             >
               <X size={14} />
@@ -673,6 +707,8 @@ function App() {
                 >
                   <RotateCcw size={15} />
                 </button>
+                <button title="Линза изменений" onClick={()=>setDialog("diff")}><GitCompareArrows size={15}/><span className="extra-label">Изменения</span></button>
+                <button title="Карта методов" onClick={()=>setDialog("methods")}><Map size={15}/></button>
                 <span className="divider" />
                 <button disabled={disabled || parsing} onClick={analyze}>
                   <ScanLine size={15} />
@@ -752,6 +788,8 @@ function App() {
                 className="resize-handle"
                 role="separator"
                 aria-label="Изменить ширину панелей"
+                tabIndex={0} aria-orientation="vertical" aria-valuemin={25} aria-valuemax={70} aria-valuenow={Math.round(width)}
+                onKeyDown={e=>{if(e.key==="ArrowLeft"||e.key==="ArrowRight"){e.preventDefault();setWidth(w=>Math.max(25,Math.min(70,w+(e.key==="ArrowRight"?2:-2))));}}}
                 onPointerDown={resize}
               />
               <section
@@ -874,10 +912,7 @@ function App() {
                 </div>
                 <div className="panel-foot">
                   <span>
-                    <i className="legend-dot" />
-                    Операция <i className="legend-dot amber" />
-                    Условие <i className="legend-dot teal" />
-                    Вызов
+                    <button className="symbol-legend-button" onClick={()=>setDialog("symbols")} title="Обозначения блок-схемы"><HelpCircle size={12}/>Обозначения фигур</button>
                   </span>
                   <span>
                     {graph?.nodes.filter((n) => n.method === method).length ??
@@ -1214,6 +1249,15 @@ function App() {
             )}
           </section>
         )}
+        {palette && <CommandPalette items={commands} close={()=>setPalette(false)}/>}
+        {dialog && <StudioDialog title={({symbols:"Как читать блок-схему",project:"Обзор проекта",profile:"Ваше рабочее пространство",access:"Полное рабочее пространство",methods:"Карта методов",diff:"Линза изменений",component})[dialog]??"Mirutex IDE"} close={()=>setDialog("")} wide={["diff","component"].includes(dialog)}>
+          {dialog==="symbols" && <><div className="symbol-guide">{symbolGuide.map(item=><div key={item.shape}><div className="symbol-preview"><FlowSymbol shape={item.shape} width={item.shape==="decision"?300:260} height={item.shape==="decision"?176:100}/></div><div><strong>{item.title}</strong><p>{item.description}</p></div></div>)}</div><p className="symbol-guide-note">Пунктирные боковые линии показывают обратные переходы циклов. Перемещение фигуры меняет только раскладку. Полный код доступен при выборе узла.</p></>}
+          {dialog==="methods" && <><p className="dialog-description">Перейдите к методу, не теряя контекст. Размер показывает число узлов его графа.</p><input className="method-search" aria-label="Найти метод" placeholder="Имя метода или сигнатура…" value={methodQuery} onChange={e=>setMethodQuery(e.target.value)}/><div className="method-list">{graph?.methods.filter(m=>(m.name+" "+m.signature).toLowerCase().includes(methodQuery.toLowerCase())).map(m=><button key={m.id} onClick={()=>{setDialog("");setTab("workspace");setMethod(m.id);const n=graph.nodes.find(n=>n.method===m.id);if(n)select(n);}}><span><strong>{m.name}</strong><small>{m.signature}</small></span><span>L{m.line} · {graph.nodes.filter(n=>n.method===m.id).length} узлов <ArrowRight size={14}/></span></button>)}{(!graph || !graph.methods.some(m=>(m.name+" "+m.signature).toLowerCase().includes(methodQuery.toLowerCase())))&&<p>Методы не найдены. Проверьте поиск и синтаксис Java.</p>}</div></>}
+          {dialog==="diff" && <><p className="dialog-description">Слева исходная версия сравнения, справа текущий код. Снимки сохраняют также дополнительные файлы проекта.</p><DiffEditor originalModelPath="mirutex-lens-original.java" modifiedModelPath="mirutex-lens-current.java" keepCurrentOriginalModel keepCurrentModifiedModel height="55vh" language="java" original={baseline.source} modified={source} theme={dark?"mirutex-dark":"mirutex-light"} options={{...option,readOnly:true}}/><div className="dialog-actions"><button className="button" onClick={()=>{remember("Снимок из линзы изменений");setNotice("Снимок сохранён");setDialog("");}}>Сохранить снимок</button><button className="button primary" onClick={()=>{setDialog("");setTab("history");}}>Открыть историю</button></div></>}
+          {dialog==="component" && <><Editor path={"component-"+component} height="55vh" language="java" value={files[component]??"Файл больше не входит в проект"} theme={dark?"mirutex-dark":"mirutex-light"} options={{...option,readOnly:true}}/><p className="dialog-description">Файл входит в компиляцию проекта и ZIP-экспорт. Просмотр компонента не меняет исходный граф.</p><button className="button primary" onClick={()=>{void download();}}>Экспортировать проект <Download size={14}/></button></>}
+          {dialog==="project" && <><p className="dialog-description">{project.filename} · {source.split("\n").length} строк · {Object.keys(files).filter(f=>f!==project.filename).length+1} файлов</p><div className="project-metrics"><span><strong>{graph?.methods.length??0}</strong>методов</span><span><strong>{graph?.nodes.length??0}</strong>узлов</span><span><strong>{history.length}</strong>снимков</span></div><div className="dialog-actions"><button className="button primary" onClick={()=>setDialog("methods")}>Карта методов</button><button className="button" onClick={()=>{setDialog("");setTab("history");}}>История</button><button className="button" onClick={()=>setDialog("diff")}>Изменения</button></div></>}
+          {(dialog==="profile"||dialog==="access")&&<><div className="access-icon"><Sparkles size={28}/></div><h3>{demoMode?"user · демо без пароля":"Защищённый режим"}</h3><p className="dialog-description">{demoMode?"Можно писать Java, исследовать граф, запускать анализ, сохранять снимки и скачивать код. Компиляция, запуск, проверка поведения и рефакторинг доступны в защищённом режиме.":"Доступен полный цикл: граф, компиляция, выполнение, рефакторинг и сравнение поведения."}</p><div className="shortcut-sheet"><span>Палитра команд <kbd>Ctrl/⌘ Shift P</kbd></span><span>Анализ <kbd>Ctrl/⌘ K</kbd></span><span>Экспорт <kbd>Ctrl/⌘ S</kbd></span><span>Java assist <kbd>Ctrl Space / Tab</kbd></span></div><div className="dialog-actions">{demoMode&&<a className="button primary" href="/admin/">Защищённый вход <ArrowRight size={14}/></a>}<button className="button" onClick={()=>{setDialog("");setPalette(true);}}><Search size={14}/>Все команды</button><button className="button" onClick={onExit}><LogOut size={14}/>{demoMode ? "Выйти из демо" : "На экран входа"}</button></div></>}
+        </StudioDialog>}
         <footer className="statusbar">
           <span>
             <span className={"dot " + (parseError ? "bad" : "")} />
@@ -1226,7 +1270,7 @@ function App() {
             {graph?.methods.length ?? 0} методов
           </span>
           <span>
-            <Command size={12} />K анализ <Command size={12} />↵ компиляция{" "}
+            <button title="Горячие клавиши" onClick={()=>setDialog("profile")}><HelpCircle size={13}/></button> <Command size={12} />K анализ <Command size={12} />↵ компиляция{" "}
             <span className="status-separator" />
             Mirutex IDE
           </span>
