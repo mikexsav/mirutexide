@@ -9,11 +9,46 @@ import zipfile
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi import FastAPI, File, HTTPException, UploadFile, Request
+from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel, Field
+from fastapi.exceptions import RequestValidationError
+import accounts
 
-app = FastAPI(title='Mirutex IDE', version='1.0.0')
+app = FastAPI(title='Mirutex IDE', version='2.0.0')
+app.include_router(accounts.router)
+EXECUTION_PATHS = {'/api/compile', '/api/execute', '/api/graph/edit', '/api/refactor', '/api/tests/compare'}
+active_runner_users: set[str] = set()
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    # Do not echo submitted passwords or source text in validation errors.
+    return JSONResponse({'detail': '\n'.join(str(e['msg']).removeprefix('Value error, ') for e in exc.errors()[:8])}, status_code=422)
+
+
+@app.middleware('http')
+async def account_boundary(request: Request, call_next):
+    user_id = None
+    try:
+        if request.method not in {'GET', 'HEAD', 'OPTIONS'} and request.url.path.startswith('/api/'):
+            accounts.check_origin(request)
+        guarded = request.url.path in EXECUTION_PATHS or (request.url.path == '/api/graph/generate' and bool(request.cookies.get(accounts.COOKIE)))
+        if guarded and os.getenv('MIRUTEX_REQUIRE_AUTH') == 'true':
+            user_id = accounts.require_user(request, mutation=True)['id']
+            if user_id in active_runner_users or len(active_runner_users) >= 6:
+                user_id = None
+                raise HTTPException(429, 'Запуск уже выполняется. Дождитесь результата и повторите действие.', headers={'Retry-After': '10'})
+            active_runner_users.add(user_id)
+        response = await call_next(request)
+        if request.url.path.startswith(('/api/auth/', '/api/workspaces', '/api/shares/')):
+            response.headers['Cache-Control'] = 'no-store'
+        return response
+    except HTTPException as exc:
+        return JSONResponse({'detail': exc.detail}, status_code=exc.status_code, headers=exc.headers)
+    finally:
+        if user_id:
+            active_runner_users.discard(user_id)
 MAX_SOURCE = 256_000
 JAVA_IMAGE = os.getenv('JAVA_IMAGE', 'eclipse-temurin:21-jdk')
 ENGINE_URL = os.getenv('ENGINE_URL', 'http://127.0.0.1:8081')
@@ -53,7 +88,12 @@ async def engine(operation: str, data: dict) -> dict:
 
 @app.get('/health')
 async def health():
-    components = {'api': True, 'engine': False, 'docker': False, 'java_image': False}
+    components = {'api': True, 'engine': False, 'docker': False, 'java_image': False, 'storage': False}
+    try:
+        with accounts.store().connect() as db:
+            components['storage'] = db.execute('SELECT 1').fetchone()[0] == 1
+    except (OSError, accounts.sqlite3.Error):
+        pass
     try:
         async with httpx.AsyncClient(timeout=2) as client:
             components['engine'] = (await client.get(f'{ENGINE_URL}/engine/health')).is_success
@@ -84,16 +124,18 @@ async def parse(req: SourceRequest):
     return await engine('parse', {'source': req.source})
 
 @app.post('/api/graph/generate')
-async def generate(req: dict[str, Any]):
+async def generate(req: dict[str, Any], request: Request):
     result = await engine('generate', req)
     if result['source'] != req.get('source'):
+        accounts.require_execution(request)
         check = await docker_run(result['source'], compile_only=True)
         if not check['compiled'] or check['exit_code'] != 0 or check['timed_out'] or check['output_limited']:
             raise HTTPException(422, 'Генерация не прошла компиляцию: ' + check['stderr'])
     return result
 
 @app.post('/api/graph/edit')
-async def edit(req: dict[str, Any]):
+async def edit(req: dict[str, Any], request: Request):
+    accounts.require_execution(request)
     result = await engine('edit', {k: v for k, v in req.items() if k != 'files'})
     check = await docker_run(result['source'], files=req.get('files', {}), compile_only=True)
     if not check['compiled'] or check['exit_code'] != 0 or check['timed_out'] or check['output_limited']:
@@ -182,11 +224,13 @@ async def docker_run(source: str, stdin: str = '', files: dict[str, str] | None 
                 'phase': 'compile' if not compiled else 'compile_only' if compile_only else 'execution'}
 
 @app.post('/api/compile')
-async def compile_source(req: SourceRequest):
+async def compile_source(req: SourceRequest, request: Request):
+    accounts.require_execution(request)
     return await docker_run(req.source, files=req.files, compile_only=True)
 
 @app.post('/api/execute')
-async def execute(req: SourceRequest):
+async def execute(req: SourceRequest, request: Request):
+    accounts.require_execution(request)
     return await docker_run(req.source, req.stdin, req.files)
 
 async def comparison(req: CompareRequest):
@@ -203,11 +247,13 @@ async def comparison(req: CompareRequest):
             'note': 'Сравнение stdout, stderr и exit code на заданных входах. Это не формальное доказательство эквивалентности.'}
 
 @app.post('/api/tests/compare')
-async def compare(req: CompareRequest):
+async def compare(req: CompareRequest, request: Request):
+    accounts.require_execution(request, len(req.inputs) * 2)
     return await comparison(req)
 
 @app.post('/api/refactor')
-async def refactor(req: RefactorRequest):
+async def refactor(req: RefactorRequest, request: Request):
+    accounts.require_execution(request, len(req.inputs) * 2)
     if req.files:
         raise HTTPException(422, 'Повторное выделение из многофайлового проекта пока не поддерживается. Сохраните или откатите результат.')
     preview = await engine('refactor', {'source': req.source})

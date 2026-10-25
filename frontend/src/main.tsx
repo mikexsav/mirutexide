@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import AccessGate from "./AccessGate";
@@ -7,7 +7,13 @@ import ErrorBoundary from "./ErrorBoundary";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary>
-      <AccessGate />
+      <Suspense
+        fallback={
+          <main className="welcome-loading">Открываем Mirutex IDE…</main>
+        }
+      >
+        <AccessGate />
+      </Suspense>
     </ErrorBoundary>
   </StrictMode>,
 );

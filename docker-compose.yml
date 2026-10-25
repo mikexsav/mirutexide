@@ -22,8 +22,15 @@ services:
       ENGINE_URL: http://engine:8081
       JAVA_IMAGE: ${JAVA_IMAGE:-eclipse-temurin:21-jdk}
       EXECUTION_TIMEOUT: 15
+      MIRUTEX_DB_PATH: /data/mirutex.sqlite3
+      MIRUTEX_REQUIRE_AUTH: ${MIRUTEX_REQUIRE_AUTH:-false}
+      MIRUTEX_COOKIE_SECURE: ${MIRUTEX_COOKIE_SECURE:-false}
+      MIRUTEX_PUBLIC_ORIGIN: ${MIRUTEX_PUBLIC_ORIGIN:-}
+      MIRUTEX_TRUST_PROXY: ${MIRUTEX_TRUST_PROXY:-false}
+      MIRUTEX_RUNNER_QUOTA: ${MIRUTEX_RUNNER_QUOTA:-120}
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+      - mirutex-data:/data
     depends_on:
       engine:
         condition: service_healthy
@@ -48,3 +55,5 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
+volumes:
+  mirutex-data:

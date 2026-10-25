@@ -68,11 +68,32 @@ export type Preview = {
   note: string;
   validation: Comparison | null;
 };
-export async function api<T>(path: string, data?: unknown): Promise<T> {
+let csrfToken = "";
+export function setCsrfToken(token: string | null) {
+  csrfToken = token ?? "";
+}
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+export async function api<T>(
+  path: string,
+  data?: unknown,
+  method?: string,
+): Promise<T> {
   const r = await fetch(path, {
-    method: data === undefined ? "GET" : "POST",
-    headers:
-      data instanceof FormData ? {} : { "Content-Type": "application/json" },
+    method: method ?? (data === undefined ? "GET" : "POST"),
+    credentials: "same-origin",
+    headers: {
+      ...(data instanceof FormData
+        ? {}
+        : { "Content-Type": "application/json" }),
+      ...(csrfToken ? { "X-Mirutex-CSRF": csrfToken } : {}),
+    },
     body:
       data === undefined
         ? undefined
@@ -87,7 +108,7 @@ export async function api<T>(path: string, data?: unknown): Promise<T> {
       message =
         typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail ?? j);
     } catch {}
-    throw new Error(message);
+    throw new ApiError(message, r.status);
   }
   return r.json();
 }

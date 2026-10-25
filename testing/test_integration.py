@@ -3,12 +3,18 @@ import io
 import os
 import time
 import zipfile
+import json
 from pathlib import Path
 import httpx
 import pytest
 BASE=os.getenv('MIRUTEX_URL','http://127.0.0.1:8000')
 ROOT=Path(__file__).resolve().parents[1]
 CLIENT=httpx.Client(base_url=BASE,timeout=180)
+if os.getenv('MIRUTEX_TEST_AUTH_FILE'):
+    credentials=json.loads(Path(os.environ['MIRUTEX_TEST_AUTH_FILE']).read_text())
+    auth=CLIENT.post('/api/auth/login',json={k:credentials[k] for k in ['username','password']})
+    assert auth.status_code==200,'Integration account login failed'
+    CLIENT.headers['X-Mirutex-CSRF']=auth.json()['csrf_token']
 SIMPLE='public class Main {public static void main(String[] args){System.out.println("Привет");} private static int twice(int n){return n*2;}}'
 def post(path, data):
     r=CLIENT.post(path,json=data)

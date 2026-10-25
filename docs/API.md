@@ -29,3 +29,13 @@ FastAPI публикует OpenAPI на `/docs`. Source-request: `{ "source": ".
 Runner-result: `compiled`, `exit_code`, `stdout`, `stderr`, `timed_out`, `output_limited`, `phase` (compile / compile_only / execution). Две одинаковые ошибки компиляции, два timeout или два обрезанных вывода никогда не дают успешного сравнения. Одинаковые runtime-исключения с ненулевым кодом могут считаться совпавшим наблюдаемым поведением, но **не допускают** автоматического принятия рефакторинга.
 
 Ошибки: 400 — формат/кодировка файла; 413 — размер; 422 — синтаксис/валидация/неподдерживаемая операция; 503 — недоступен engine/Docker. Внутренний Spring engine работает на 8081, маршруты `/engine/{parse,generate,edit,analyze,refactor}`; в Compose не публикуется на host.
+
+## Аккаунты и пространства (2.0)
+
+`GET /api/auth/session`, `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`. Сессия — HttpOnly cookie; ответ входа содержит CSRF-токен для заголовка `X-Mirutex-CSRF`, не токен аутентификации для localStorage.
+
+`GET/POST /api/workspaces`, `GET/PUT /api/workspaces/{id}`. PUT принимает `version` и необязательные `state/name/description/archived`. Несовпадение версии — 409, чужой ID — 404. `state`: project, baseline, history (до 20), inputs. В облаке можно сохранять пустой/незавершённый исходник; это не означает, что он прошёл компиляцию.
+
+`POST /api/workspaces/{id}/shares` принимает `version` и создаёт неизменяемую копию текущего проекта, возвращает одноразово показываемый URL-токен. `GET` этого пути перечисляет метаданные ссылок. `DELETE /api/workspaces/{id}/shares/{shareId}` отзывает ссылку. `GET /api/shares/{token}` отдаёт публичный снимок до истечения срока. Baseline, история и stdin автора в него не попадают.
+
+На опубликованном сервере compile/execute/refactor/tests/compare/graph/edit требуют аккаунт и CSRF. Для graph/generate это обязательно при изменении исходника. Подробные лимиты, схема хранения и проверки: CLOUD_RELEASE.md.
